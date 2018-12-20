@@ -201,6 +201,12 @@ func RequiredUnlessInsecureFlag(ctx *cli.Context, flag string) error {
 	return errors.Errorf("flag '--%s' is required unless the '--insecure' flag is provided", flag)
 }
 
+// RequiredUnlessFlag returns an error with the required flag message unless
+// the specified flag is used.
+func RequiredUnlessFlag(ctx *cli.Context, flag, unlessFlag string) error {
+	return errors.Errorf("flag '--%s' is required unless the '--%s' flag is provided", flag, unlessFlag)
+}
+
 // RequiredUnlessSubtleFlag returns an error with the required flag message unless
 // the subtle flag is used.
 func RequiredUnlessSubtleFlag(ctx *cli.Context, flag string) error {
@@ -249,13 +255,13 @@ func FileError(err error, filename string) error {
 	if err == nil {
 		return nil
 	}
-	switch e := errors.Cause(err).(type) {
+	switch e := err.(type) {
 	case *os.PathError:
 		return errors.Errorf("%s %s failed: %v", e.Op, e.Path, e.Err)
 	case *os.LinkError:
-		return errors.Errorf("%s %s %s failed %v:", e.Op, e.Old, e.New, e.Err)
+		return errors.Errorf("%s %s %s failed: %v", e.Op, e.Old, e.New, e.Err)
 	case *os.SyscallError:
-		return errors.Errorf("%s failed %v:", e.Syscall, e.Err)
+		return errors.Errorf("%s failed: %v", e.Syscall, e.Err)
 	default:
 		return Wrap(err, "unexpected error on %s", filename)
 	}

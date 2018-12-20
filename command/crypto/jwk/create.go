@@ -2,18 +2,18 @@ package jwk
 
 import (
 	"bytes"
-	gocrypto "crypto"
-	realx509 "crypto/x509"
+	"crypto"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/pkg/errors"
-	"github.com/smallstep/cli/crypto/pemutil"
+	"github.com/smallstep/cli/command"
 	"github.com/smallstep/cli/crypto/randutil"
 	"github.com/smallstep/cli/errs"
+	"github.com/smallstep/cli/flags"
 	"github.com/smallstep/cli/jose"
+	"github.com/smallstep/cli/ui"
 	"github.com/smallstep/cli/utils"
 	"github.com/urfave/cli"
 )
@@ -28,7 +28,7 @@ const (
 func createCommand() cli.Command {
 	return cli.Command{
 		Name:   "create",
-		Action: cli.ActionFunc(createAction),
+		Action: command.ActionFunc(createAction),
 		Usage:  "create a JWK (JSON Web Key)",
 		UsageText: `**step crypto jwk create** <public-jwk-file> <private-jwk-file>
     [**--kty**=<type>] [**--alg**=<algorithm>] [**--use**=<use>]
@@ -137,7 +137,7 @@ $ step crypto jwk create ed.pub.json ed.json \
 Create a key from an existing PEM file:
 
 '''
-$ step crypto jwk create jwk.pub.json jwk.json
+$ step crypto jwk create jwk.pub.json jwk.json \
     --from-pem key.pem
 '''
 
@@ -388,11 +388,6 @@ multiple algorithms.
 '--subtle' flag is required as you must verify that the operations are
 related.`,
 			},
-			cli.StringSliceFlag{
-				Name:   "from-certificate",
-				Usage:  `TODO: usage is missing.`,
-				Hidden: true,
-			},
 			cli.StringFlag{
 				Name: "from-pem",
 				Usage: `Create a JWK representing the key encoded in an
@@ -404,14 +399,9 @@ existing <pem-file> instead of creating a new key.`,
 key material will be written to disk unencrypted. This is not
 recommended. Requires **--insecure** flag.`,
 			},
-			cli.BoolFlag{
-				Name:   "subtle",
-				Hidden: true,
-			},
-			cli.BoolFlag{
-				Name:   "insecure",
-				Hidden: true,
-			},
+			flags.Subtle,
+			flags.Insecure,
+			flags.Force,
 		},
 	}
 }
@@ -490,7 +480,7 @@ func createAction(ctx *cli.Context) error {
 	var jwk *jose.JSONWebKey
 	switch {
 	case pemFile != "":
-		jwk, err = jose.GenerateJWKFromPEM(pemFile)
+		jwk, err = jose.GenerateJWKFromPEM(pemFile, ctx.Bool("subtle"))
 	default:
 		jwk, err = jose.GenerateJWK(kty, crv, alg, use, kid, size)
 	}
@@ -504,7 +494,7 @@ func createAction(ctx *cli.Context) error {
 	} else {
 		// A hash of a symmetric key can leak information, so we only thumbprint asymmetric keys.
 		if kty != "oct" {
-			hash, err := jwk.Thumbprint(gocrypto.SHA256)
+			hash, err := jwk.Thumbprint(crypto.SHA256)
 			if err != nil {
 				return errors.Wrap(err, "error generating JWK thumbprint")
 			}
@@ -519,22 +509,6 @@ func createAction(ctx *cli.Context) error {
 
 	if err := jose.ValidateJWK(jwk); err != nil {
 		return err
-	}
-
-	// Add x5c (X.509 Certificate Chain) parameter
-	crtFiles := ctx.StringSlice("from-certificate")
-	for _, name := range crtFiles {
-		_crt, err := pemutil.ReadCertificate(name)
-		if err != nil {
-			return err
-		}
-		// have: step-cli x509 Certificate
-		// want: crypto/x509 Certificate
-		crt, err := realx509.ParseCertificate(_crt.Raw)
-		if err != nil {
-			return err
-		}
-		jwk.Certificates = append(jwk.Certificates, crt)
 	}
 
 	var jwkPub jose.JSONWebKey
@@ -554,8 +528,9 @@ func createAction(ctx *cli.Context) error {
 	}
 
 	if jwk.IsPublic() {
-		fmt.Fprintln(os.Stderr, "Only the public JWK was generated.")
-		fmt.Fprintln(os.Stderr, "Cannot retrieve a private key from a public one.")
+		ui.Printf("Your public key has been saved in %s.\n", pubFile)
+		ui.Println("Only the public JWK was generated.")
+		ui.Println("Cannot retrieve a private key from a public one.")
 		return nil
 	}
 
@@ -564,7 +539,7 @@ func createAction(ctx *cli.Context) error {
 		var rcpt jose.Recipient
 		// Generate JWE encryption key.
 		if jose.SupportsPBKDF2 {
-			key, err := utils.ReadPassword("Please enter the password to encrypt the private JWK: ")
+			key, err := ui.PromptPassword("Please enter the password to encrypt the private JWK")
 			if err != nil {
 				return errors.Wrap(err, "error reading password")
 			}
@@ -594,7 +569,9 @@ func createAction(ctx *cli.Context) error {
 			return errors.Wrap(err, "error marshaling JWK")
 		}
 
-		encrypter, err := jose.NewEncrypter(jose.A128GCM, rcpt, nil)
+		opts := new(jose.EncrypterOptions)
+		opts.WithContentType(jose.ContentType("jwk+json"))
+		encrypter, err := jose.NewEncrypter(jose.DefaultEncAlgorithm, rcpt, opts)
 		if err != nil {
 			return errors.Wrap(err, "error creating cipher")
 		}
@@ -619,5 +596,7 @@ func createAction(ctx *cli.Context) error {
 		return errs.FileError(err, privFile)
 	}
 
+	ui.Printf("Your public key has been saved in %s.\n", pubFile)
+	ui.Printf("Your private key has been saved in %s.\n", privFile)
 	return nil
 }

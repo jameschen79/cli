@@ -21,9 +21,10 @@ func lintCommand() cli.Command {
 	return cli.Command{
 		Name:      "lint",
 		Action:    cli.ActionFunc(lintAction),
-		Usage:     `lint certificate details.`,
-		UsageText: `**step certificate lint** <crt_file> [**--roots**=<roots>]`,
-		Description: `UPDATE ME
+		Usage:     `lint certificate details`,
+		UsageText: `**step certificate lint** <crt_file> [**--roots**=<root-bundle>]`,
+		Description: `**step certificate lint** checks a certificate for common
+errors and outputs the result in JSON format.
 
 ## POSITIONAL ARGUMENTS
 

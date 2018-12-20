@@ -9,7 +9,7 @@ import (
 func init() {
 	cmd := cli.Command{
 		Name:      "certificate",
-		Usage:     "create, revoke, validate, bundle, and otherwise manage certificates.",
+		Usage:     "create, revoke, validate, bundle, and otherwise manage certificates",
 		UsageText: "step certificate SUBCOMMAND [ARGUMENTS] [GLOBAL_FLAGS] [SUBCOMMAND_FLAGS]",
 		Description: `**step certificate** command group provides facilities for creating
 certificate signing requests (CSRs), creating self-signed certificates
@@ -17,10 +17,6 @@ certificate signing requests (CSRs), creating self-signed certificates
 intermediate CA certificate by signing a CSR, validating certificates,
 renewing certificates, generating certificate bundles, and key-wrapping
 of private keys.
-
-More information about certificates in general (as opposed to the
-**step certificate** sub-commands) can be found at **step help topics certificate**
-or online at [URL].
 
 ## EXAMPLES
 
@@ -63,12 +59,19 @@ Bundle an end certificate with the issuing certificate:
 '''
 $ step certificate bundle ./baz.crt ./foo.crt bundle.crt
 '''
+
+Convert PEM format certificate to DER and write to disk.
+'''
+$ step certificate format foo.pem --out foo.der
+'''
 `,
 
 		Subcommands: cli.Commands{
 			bundleCommand(),
 			createCommand(),
+			formatCommand(),
 			inspectCommand(),
+			fingerprintCommand(),
 			lintCommand(),
 			//renewCommand(),
 			signCommand(),

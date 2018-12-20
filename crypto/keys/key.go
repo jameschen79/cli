@@ -5,18 +5,13 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/pem"
 	"math/big"
 
 	"github.com/pkg/errors"
-	"github.com/smallstep/cli/pkg/x509"
 	"golang.org/x/crypto/ed25519"
 )
 
-// DefaultPEMCipher is the default algorithm used when encrypting PEM blocks
-// by the CA.
 var (
-	DefaultPEMCipher = x509.PEMCipherAES128
 	// DefaultKeyType is the default type of a private key.
 	DefaultKeyType = "EC"
 	// DefaultKeySize is the default size (in # of bits) of a private key.
@@ -34,22 +29,11 @@ func PublicKey(priv interface{}) (interface{}, error) {
 		return &k.PublicKey, nil
 	case ed25519.PrivateKey:
 		return k.Public(), nil
+	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey:
+		return k, nil
 	default:
 		return nil, errors.Errorf("unrecognized key type: %T", priv)
 	}
-}
-
-// PublicPEM returns the public key in PEM block format.
-func PublicPEM(pub interface{}) (*pem.Block, error) {
-	pubBytes, err := x509.MarshalPKIXPublicKey(pub)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return &pem.Block{
-		Bytes: pubBytes,
-		Type:  "PUBLIC KEY",
-	}, nil
 }
 
 // GenerateDefaultKey generates a public/private key pair using sane defaults

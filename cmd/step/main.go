@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"reflect"
 	"regexp"
+	"time"
 
 	"github.com/urfave/cli"
 
@@ -16,9 +18,11 @@ import (
 	"github.com/smallstep/cli/usage"
 
 	// Enabled commands
+	_ "github.com/smallstep/cli/command/ca"
 	_ "github.com/smallstep/cli/command/certificate"
 	_ "github.com/smallstep/cli/command/crypto"
 	_ "github.com/smallstep/cli/command/oauth"
+	_ "github.com/smallstep/cli/command/path"
 
 	// Profiling and debugging
 	_ "net/http/pprof"
@@ -34,6 +38,7 @@ var BuildTime = "N/A"
 
 func init() {
 	config.Set(Version, BuildTime)
+	rand.Seed(time.Now().UnixNano())
 }
 
 func main() {
@@ -58,6 +63,12 @@ func main() {
 	app.Flags = append(app.Flags, cli.HelpFlag)
 	app.EnableBashCompletion = true
 	app.Copyright = "(c) 2018 Smallstep Labs, Inc."
+
+	// Flag of custom configuration flag
+	app.Flags = append(app.Flags, cli.StringFlag{
+		Name:  "config",
+		Usage: "path to the config file to use for CLI flags",
+	})
 
 	// All non-successful output should be written to stderr
 	app.Writer = os.Stdout

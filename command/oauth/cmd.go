@@ -551,6 +551,11 @@ func (o *oauth) DoJWTAuthorization(issuer, aud string) (*token, error) {
 // ServeHTTP is the handler that performs the OAuth 2.0 dance and returns the
 // tokens using channels.
 func (o *oauth) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.URL.Path != "/" {
+		http.NotFound(w, req)
+		return
+	}
+
 	q := req.URL.Query()
 	errStr := q.Get("error")
 	if errStr != "" {
@@ -558,13 +563,19 @@ func (o *oauth) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	code := q.Get("code")
+	code, state := q.Get("code"), q.Get("state")
+	if code == "" || state == "" {
+		fmt.Fprintf(os.Stderr, "Invalid request received: http://%s%s\n", req.RemoteAddr, req.URL.String())
+		fmt.Fprintf(os.Stderr, "You may have an app or browser plugin that needs to be turned off\n")
+		http.Error(w, "400 bad request", http.StatusBadRequest)
+		return
+	}
+
 	if code == "" {
 		o.badRequest(w, "Failed to authenticate: missing or invalid code")
 		return
 	}
 
-	state := q.Get("state")
 	if state == "" || state != o.state {
 		o.badRequest(w, "Failed to authenticate: missing or invalid state")
 		return
@@ -573,6 +584,7 @@ func (o *oauth) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	tok, err := o.Exchange(o.tokenEndpoint, code)
 	if err != nil {
 		o.badRequest(w, "Failed exchanging authorization code: "+err.Error())
+		return
 	}
 	if tok.Err != "" || tok.ErrDesc != "" {
 		o.badRequest(w, fmt.Sprintf("Failed exchanging authorization code: %s. %s", tok.Err, tok.ErrDesc))
@@ -581,7 +593,10 @@ func (o *oauth) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
-	w.Write([]byte("Success: look for the token on the command line"))
+	w.Write([]byte(`<html><head><title>OAuth Request Successful</title>`))
+	w.Write([]byte(`</head><body><p style='font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; font-size: 22px; color: #333; width: 400px; margin: 0 auto; text-align: center; line-height: 1.7; padding: 20px;'>`))
+	w.Write([]byte(`<strong style='font-size: 28px; color: #000;'>Success</strong><br />Look for the token on the command line`))
+	w.Write([]byte(`</p></body></html>`))
 	o.tokCh <- tok
 }
 
@@ -634,6 +649,10 @@ func (o *oauth) Exchange(tokenEndpoint, code string) (*token, error) {
 func (o *oauth) badRequest(w http.ResponseWriter, msg string) {
 	w.WriteHeader(http.StatusBadRequest)
 	w.Header().Add("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte(`<html><head><title>OAuth Request Unsuccessful</title>`))
+	w.Write([]byte(`</head><body><p style='font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; font-size: 22px; color: #333; width: 400px; margin: 0 auto; text-align: center; line-height: 1.7; padding: 20px;'>`))
+	w.Write([]byte(`<strong style='font-size: 28px; color: red;'>Failure</strong><br />`))
 	w.Write([]byte(msg))
+	w.Write([]byte(`</p></body></html>`))
 	o.errCh <- errors.New(msg)
 }
